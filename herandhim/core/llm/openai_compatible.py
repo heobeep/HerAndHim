@@ -15,25 +15,6 @@ from .base import LLMProvider
 from .response import MockChoice, MockFunction, MockMessage, MockResponse, MockToolCall
 
 
-def _promote_reasoning_to_content(resp: Any) -> None:
-    """If a response's `content` is empty but `reasoning_content` is set
-    (DeepSeek V4 quirk), copy reasoning into content so callers see the
-    actual answer rather than a blank message bubble.
-    """
-    try:
-        msg = resp.choices[0].message
-    except (AttributeError, IndexError):
-        return
-    if msg is None or getattr(msg, "content", None):
-        return
-    reasoning = getattr(msg, "reasoning_content", None)
-    if reasoning:
-        try:
-            msg.content = reasoning
-        except Exception:
-            pass
-
-
 class OpenAICompatibleProvider(LLMProvider):
     """Thin wrapper around the OpenAI SDK for chat completions."""
 
@@ -77,6 +58,24 @@ class OpenAICompatibleProvider(LLMProvider):
                 or n.startswith("moonshot-v1-vision")
             )
         self.supports_images = supports_images
+
+    def _apply_request_defaults(self, req: dict[str, Any]) -> None:
+        """Apply model-specific safe defaults before sending a request.
+
+        DeepSeek V4 enables thinking by default. Keep its private
+        reasoning_content out of the user-facing channel and request a
+        normal final answer instead. Preserve any caller-supplied extra_body
+        fields while enforcing the non-thinking mode for this model family.
+        """
+        if "deepseek-v4" not in self.model_name.lower():
+            return
+        extra_body = req.get("extra_body")
+        extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
+        thinking = extra_body.get("thinking")
+        thinking = dict(thinking) if isinstance(thinking, dict) else {}
+        thinking["type"] = "disabled"
+        extra_body["thinking"] = thinking
+        req["extra_body"] = extra_body
 
     def _scrub_images_if_unsupported(
         self, messages: list[dict[str, Any]],
@@ -122,9 +121,8 @@ class OpenAICompatibleProvider(LLMProvider):
             req["tools"] = tools
             req["tool_choice"] = tool_choice
 
-        resp = self.client.chat.completions.create(**req)
-        _promote_reasoning_to_content(resp)
-        return resp
+        self._apply_request_defaults(req)
+        return self.client.chat.completions.create(**req)
 
     def chat_stream(
         self,
@@ -144,10 +142,8 @@ class OpenAICompatibleProvider(LLMProvider):
             req["tools"] = tools
             req["tool_choice"] = tool_choice
 
+        self._apply_request_defaults(req)
         content_text = ""
-        reasoning_text = ""  # DeepSeek V4 puts the actual answer here when in
-                              # thinking mode; we fall back to it if `content`
-                              # ends up empty.
         tool_calls_acc: dict[int, dict] = {}
 
         for chunk in self.client.chat.completions.create(**req):
@@ -155,17 +151,11 @@ class OpenAICompatibleProvider(LLMProvider):
             if delta is None:
                 continue
 
+            # Only the model's final-answer channel is user-visible.
+            # Never stream reasoning_content to the chat.
             if delta.content:
                 content_text += delta.content
                 yield {"type": "text_delta", "text": delta.content}
-
-            # Some providers (notably DeepSeek V4) stream the visible answer
-            # via `reasoning_content` instead of `content`. Capture it so we
-            # can fall back if `content_text` is empty at end-of-stream.
-            r = getattr(delta, "reasoning_content", None)
-            if r:
-                reasoning_text += r
-                yield {"type": "text_delta", "text": r}
 
             if delta.tool_calls:
                 for tc_delta in delta.tool_calls:
@@ -194,9 +184,8 @@ class OpenAICompatibleProvider(LLMProvider):
             for v in sorted(tool_calls_acc.values(), key=lambda x: x["id"])
         ]
 
-        # If the provider only filled reasoning_content (e.g. DeepSeek V4-Flash
-        # for tiny prompts), surface that as the visible response.
-        final_content = content_text or reasoning_text or None
+        # Hidden reasoning is never a user-facing fallback.
+        final_content = content_text or None
 
         return MockResponse(choices=[
             MockChoice(message=MockMessage(
