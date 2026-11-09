@@ -318,6 +318,11 @@ def _run_foreground(args) -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    # HTTP client request logs can include Telegram Bot API URLs, whose path
+    # contains the bot token. Keep these libraries quiet at INFO level.
+    for _http_logger in ("httpx", "httpx2", "httpcore"):
+        logging.getLogger(_http_logger).setLevel(logging.WARNING)
+
     try:
         import uvicorn
     except ImportError:
