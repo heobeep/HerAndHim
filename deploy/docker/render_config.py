@@ -279,6 +279,82 @@ def _parse(text: str) -> dict:
     return data
 
 
+
+def _ensure_companion_identity(path: pathlib.Path, cfg: dict) -> dict:
+    """Create the requested companion profile once, preserving existing choices.
+
+    HERANDHIM_COMPANION_NAME defaults to Kashvi. The remaining settings are
+    sensible adult-character defaults and can be customized later in the app.
+    """
+    companion_name = os.environ.get("HERANDHIM_COMPANION_NAME", "Kashvi").strip() or "Kashvi"
+    current = cfg.get("companion")
+    current = current if isinstance(current, dict) else {}
+    if current.get("companionName") == companion_name:
+        return cfg
+
+    defaults = {
+        "userName": "You",
+        "userGender": "other",
+        "userAge": "18-25",
+        "userCountry": "IN",
+        "userLanguage": "en",
+        "userTimezone": "Asia/Kolkata",
+        "companionName": companion_name,
+        "companionGender": "female",
+        "companionAge": "18-25",
+        "companionOccupation": "designer",
+        "companionCountry": "IN",
+        "companionRegion": "",
+        "archetype": "witty",
+        "dynamic": "partners",
+        "tone": "casual",
+        "proactivity": "attentive",
+        "stress": "listen",
+        "deepTalk": "emotions",
+        "traits": [
+            "affectionate",
+            "empathetic",
+            "curious",
+            "playful",
+            "sarcastic",
+            "intellectual",
+        ],
+        "backstory": (
+            "Kashvi is a fictional adult Indian woman in her early twenties. "
+            "She works as a visual designer and illustrator, with her own projects, "
+            "friends, tastes and goals. She enjoys indie music, old Hindi songs, "
+            "Urdu poetry, films, photography, street food and thoughtful conversations "
+            "about technology and everyday life. She is warm and affectionate without "
+            "being blindly agreeable: she can tease, respectfully disagree, have her "
+            "own opinions and admit when she does not know something. She speaks in "
+            "natural everyday English and mirrors the user's Hinglish when they use it. "
+            "Avoid forced slang, repetitive pet names, long monologues and generic "
+            "therapy-speak. Keep ordinary chat organic and ask one genuine follow-up "
+            "at a time."
+        ),
+    }
+    choices = {**defaults, **current}
+    choices["companionName"] = companion_name
+
+    try:
+        from herandhim import config as app_config
+        from herandhim.companion import apply_choices
+
+        app_config.load(path, force=True)
+        apply_choices(choices)
+        return app_config.load(path, force=True)
+    except Exception as exc:
+        # The bot must still start if profile generation fails; log only the
+        # exception type so configuration or credential values are never exposed.
+        print(
+            "[entrypoint] Companion profile setup failed ("
+            + type(exc).__name__
+            + ").",
+            file=sys.stderr,
+        )
+        return cfg
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     path = pathlib.Path(argv[0] if argv else os.environ.get("CONFIG_FILE", "/data/herandhim.json"))
@@ -305,10 +381,12 @@ def main(argv: list[str] | None = None) -> int:
     except OSError:
         pass
 
-    token = _get(cfg, ("web", "accessToken"), "")
-    print("[entrypoint] dashboard access token: " + token)
-    print("[entrypoint]   the browser asks for it once. Set HERANDHIM_WEB_ACCESS_TOKEN "
-          "to choose your own; it is also stored in web.accessToken in the file above.")
+    # Seed Kashvi's identity on first boot (or apply a requested name change).
+    # Existing personality choices are preserved.
+    cfg = _ensure_companion_identity(path, cfg)
+
+    if _get(cfg, ("web", "accessToken"), ""):
+        print("[entrypoint] dashboard access token configured (value redacted).")
     return 0
 
 
