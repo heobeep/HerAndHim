@@ -144,6 +144,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
         self._apply_request_defaults(req)
         content_text = ""
+        reasoning_text = ""
         tool_calls_acc: dict[int, dict] = {}
 
         for chunk in self.client.chat.completions.create(**req):
@@ -151,8 +152,13 @@ class OpenAICompatibleProvider(LLMProvider):
             if delta is None:
                 continue
 
+            # Preserve private reasoning for DeepSeek's next tool-call turn,
+            # but never emit it as a user-visible text delta.
+            private_reasoning = getattr(delta, "reasoning_content", None)
+            if private_reasoning:
+                reasoning_text += private_reasoning
+
             # Only the model's final-answer channel is user-visible.
-            # Never stream reasoning_content to the chat.
             if delta.content:
                 content_text += delta.content
                 yield {"type": "text_delta", "text": delta.content}
@@ -191,5 +197,6 @@ class OpenAICompatibleProvider(LLMProvider):
             MockChoice(message=MockMessage(
                 content=final_content,
                 tool_calls=mock_tool_calls or None,
+                reasoning_content=reasoning_text or None,
             ))
         ])
