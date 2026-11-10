@@ -64,6 +64,8 @@ def test_stream_ignores_reasoning_and_only_yields_final_content():
 
     assert events == [{"type": "text_delta", "text": "Hey! Good to see you."}]
     assert response.choices[0].message.content == "Hey! Good to see you."
+    assert response.choices[0].message.reasoning_content == "Private internal reasoning."
+    assert response.choices[0].message.model_dump()["reasoning_content"] == "Private internal reasoning."
     _, kwargs = provider.client.chat.completions.create.call_args
     assert kwargs["stream"] is True
     assert kwargs["extra_body"]["thinking"]["type"] == "enabled"
