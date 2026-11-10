@@ -62,10 +62,10 @@ class OpenAICompatibleProvider(LLMProvider):
     def _apply_request_defaults(self, req: dict[str, Any]) -> None:
         """Apply model-specific safe defaults before sending a request.
 
-        DeepSeek V4 enables thinking by default. Keep its private
-        reasoning_content out of the user-facing channel and request a
-        normal final answer instead. Preserve any caller-supplied extra_body
-        fields while enforcing the non-thinking mode for this model family.
+        Enable DeepSeek V4 thinking, but keep reasoning_content private.
+        Only the final content channel is sent to the user. Preserve any
+        caller-supplied extra_body fields while enabling thinking for this
+        model family.
         """
         if "deepseek-v4" not in self.model_name.lower():
             return
@@ -73,7 +73,7 @@ class OpenAICompatibleProvider(LLMProvider):
         extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
         thinking = extra_body.get("thinking")
         thinking = dict(thinking) if isinstance(thinking, dict) else {}
-        thinking["type"] = "disabled"
+        thinking["type"] = "enabled"
         extra_body["thinking"] = thinking
         req["extra_body"] = extra_body
 
