@@ -29,9 +29,14 @@ class MockToolCall:
 class MockMessage:
     content: Optional[str]
     tool_calls: Optional[list[MockToolCall]]
+    reasoning_content: Optional[str] = None
 
     def model_dump(self) -> dict:
         d: dict = {"role": "assistant", "content": self.content}
+        if self.reasoning_content:
+            # Internal-only context required by DeepSeek when continuing a
+            # thinking-mode tool cycle. This is never streamed to the user.
+            d["reasoning_content"] = self.reasoning_content
         if self.tool_calls:
             d["tool_calls"] = [
                 {
