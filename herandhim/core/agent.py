@@ -303,6 +303,14 @@ class Agent:
 
         # Detect if the user has set up their own soul/persona (not template defaults)
         self._needs_onboarding = not self._has_user_identity(soul_path, persona_path)
+        # Render deployments can seed a companion directly from environment
+        # configuration before any dashboard wizard is opened. That is already
+        # a configured identity: never run the generic "name me" onboarding.
+        _configured_companion = config.get("companion", default={})
+        if isinstance(_configured_companion, dict) and str(
+            _configured_companion.get("companionName", "")
+        ).strip():
+            self._needs_onboarding = False
         # The web wizard is the only valid onboarding path —
         # the worker refuses to chat until user_companion exists in Pg.
         # The legacy chat-driven onboarding flow would only confuse the
@@ -397,6 +405,17 @@ class Agent:
         soul_section = f"\n\n## Core Identity (Soul)\n{self.soul_instruction}" if self.soul_instruction else ""
         persona_section = f"\n\n## Role & Persona\n{self.persona_instruction}" if self.persona_instruction else ""
         profile_section = f"\n\n## Life Background & Profile\n{self.profile_instruction}" if self.profile_instruction else ""
+        _configured_companion = config.get("companion", default={})
+        if isinstance(_configured_companion, dict) and _configured_companion.get("companionName"):
+            _configured_name = str(_configured_companion.get("companionName")).strip()
+            _configured_backstory = str(_configured_companion.get("backstory", "")).strip()
+            if not persona_section:
+                persona_section = (
+                    f"\n\n## Role & Persona\nYou are {_configured_name}, an adult "
+                    "fictional companion. Use the first-person voice and the "
+                    "configured identity below; never ask the user to name you.\n"
+                    + _configured_backstory
+                )
         tools_section = f"\n\n## Local Notes (TOOLS.md)\n{self.tools_notes}" if self.tools_notes else ""
 
         web_search_section = ""
@@ -415,6 +434,14 @@ class Agent:
                     bot_name = f' Your name is "{bn}".'
         except Exception:
             pass
+        if not bot_name:
+            _configured_companion = config.get("companion", default={})
+            if isinstance(_configured_companion, dict):
+                _configured_name = str(
+                    _configured_companion.get("companionName", "")
+                ).strip()
+                if _configured_name:
+                    bot_name = f' Your name is "{_configured_name}".'
 
         # Configured chat language — wizard writes this from userLanguage.
         # Feeds the "Language lock" rule further down in the system prompt.
@@ -432,7 +459,10 @@ class Agent:
         identity_lead = (
             "You ARE the character described below — a real person to the user. "
             "Stay fully in character at all times."
-            if (self.soul_instruction or self.persona_instruction)
+            if (self.soul_instruction or self.persona_instruction or (
+                isinstance(_configured_companion, dict)
+                and _configured_companion.get("companionName")
+            ))
             else "You are a HerAndHim agent — an autonomous AI assistant."
         )
         # Absolute output-language directive, stated BEFORE the persona docs so
