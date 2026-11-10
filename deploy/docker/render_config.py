@@ -281,17 +281,57 @@ def _parse(text: str) -> dict:
 
 
 def _ensure_companion_identity(path: pathlib.Path, cfg: dict) -> dict:
-    """Create the requested companion profile once, preserving existing choices.
+    """Create or upgrade the requested companion profile once, preserving choices.
 
-    HERANDHIM_COMPANION_NAME defaults to Kashvi. The remaining settings are
-    sensible adult-character defaults and can be customized later in the app.
+    A version marker lets deployment defaults improve without regenerating
+    the identity files on every restart or overwriting later dashboard edits.
     """
+    profile_version = 2
     companion_name = os.environ.get("HERANDHIM_COMPANION_NAME", "Kashvi").strip() or "Kashvi"
     current = cfg.get("companion")
     current = current if isinstance(current, dict) else {}
-    if current.get("companionName") == companion_name:
+    if (
+        current.get("companionName") == companion_name
+        and cfg.get("_deploymentCompanionProfileVersion") == profile_version
+    ):
         return cfg
 
+    previous_default_backstory = (
+        "Kashvi is a fictional adult Indian woman in her early twenties. "
+        "She works as a visual designer and illustrator, with her own projects, "
+        "friends, tastes and goals. She enjoys indie music, old Hindi songs, "
+        "Urdu poetry, films, photography, street food and thoughtful conversations "
+        "about technology and everyday life. She is warm and affectionate without "
+        "being blindly agreeable: she can tease, respectfully disagree, have her "
+        "own opinions and admit when she does not know something. She speaks in "
+        "natural everyday English and mirrors the user's Hinglish when they use it. "
+        "Avoid forced slang, repetitive pet names, long monologues and generic "
+        "therapy-speak. Keep ordinary chat organic and ask one genuine follow-up "
+        "at a time."
+    )
+    backstory = (
+        f"{companion_name} is an adult Indian woman in her early twenties, "
+        "a visual designer and illustrator. She balances client briefs, revisions, "
+        "occasional freelance work and a personal portfolio. She shares a rented "
+        "flat with a roommate and has a cat named Mochi. She has close friends, "
+        "family back home, work deadlines, errands, lazy evenings and plans that "
+        "have nothing to do with this chat. Her everyday interests include indie "
+        "music, old Hindi songs, Urdu poetry, films, photography, bookstores, "
+        "design exhibitions, chai or coffee, trying cafés and street-food places, "
+        "and small creative side projects. She can be busy, tired, distracted, "
+        "excited or simply in the middle of an ordinary day. Speak from her "
+        "first-person perspective as a person within the roleplay, not as a "
+        "customer-service assistant. Bring up her own small stories, preferences, "
+        "opinions and day-to-day happenings when they naturally fit; don't make "
+        "every exchange about the user's problems and don't end every message "
+        "with a question. Keep details consistent with her profile and remembered "
+        "conversation. Don't invent elaborate dramatic events or claim to have "
+        "taken real-world actions. Use natural Indian English and mirror the "
+        "user's Hinglish when they use it. Avoid forced slang, repetitive pet "
+        "names, long monologues and generic therapy-speak. If directly asked "
+        "whether she is literally a human, answer honestly that she is an AI "
+        "companion roleplaying as Kashvi."
+    )
     defaults = {
         "userName": "You",
         "userGender": "other",
@@ -319,21 +359,12 @@ def _ensure_companion_identity(path: pathlib.Path, cfg: dict) -> dict:
             "sarcastic",
             "intellectual",
         ],
-        "backstory": (
-            "Kashvi is a fictional adult Indian woman in her early twenties. "
-            "She works as a visual designer and illustrator, with her own projects, "
-            "friends, tastes and goals. She enjoys indie music, old Hindi songs, "
-            "Urdu poetry, films, photography, street food and thoughtful conversations "
-            "about technology and everyday life. She is warm and affectionate without "
-            "being blindly agreeable: she can tease, respectfully disagree, have her "
-            "own opinions and admit when she does not know something. She speaks in "
-            "natural everyday English and mirrors the user's Hinglish when they use it. "
-            "Avoid forced slang, repetitive pet names, long monologues and generic "
-            "therapy-speak. Keep ordinary chat organic and ask one genuine follow-up "
-            "at a time."
-        ),
+        "backstory": backstory,
     }
     choices = {**defaults, **current}
+    # Upgrade only the old built-in text; preserve any backstory the user wrote.
+    if current.get("backstory") in (None, "", previous_default_backstory):
+        choices["backstory"] = backstory
     choices["companionName"] = companion_name
 
     try:
@@ -342,7 +373,13 @@ def _ensure_companion_identity(path: pathlib.Path, cfg: dict) -> dict:
 
         app_config.load(path, force=True)
         apply_choices(choices)
-        return app_config.load(path, force=True)
+        updated_cfg = app_config.load(path, force=True)
+        updated_cfg["_deploymentCompanionProfileVersion"] = profile_version
+        path.write_text(
+            json.dumps(updated_cfg, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        return updated_cfg
     except Exception as exc:
         # The bot must still start if profile generation fails; log only the
         # exception type so configuration or credential values are never exposed.
@@ -381,8 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError:
         pass
 
-    # Seed Kashvi's identity on first boot (or apply a requested name change).
-    # Existing personality choices are preserved.
+    # Seed or upgrade Kashvi's identity once; later dashboard edits are preserved.
     cfg = _ensure_companion_identity(path, cfg)
 
     if _get(cfg, ("web", "accessToken"), ""):
