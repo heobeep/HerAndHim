@@ -48,7 +48,7 @@ def test_chat_never_promotes_reasoning_to_visible_content():
 
     assert result.choices[0].message.content is None
     _, kwargs = provider.client.chat.completions.create.call_args
-    assert kwargs["extra_body"]["thinking"]["type"] == "disabled"
+    assert kwargs["extra_body"]["thinking"]["type"] == "enabled"
 
 
 def test_stream_ignores_reasoning_and_only_yields_final_content():
@@ -66,7 +66,7 @@ def test_stream_ignores_reasoning_and_only_yields_final_content():
     assert response.choices[0].message.content == "Hey! Good to see you."
     _, kwargs = provider.client.chat.completions.create.call_args
     assert kwargs["stream"] is True
-    assert kwargs["extra_body"]["thinking"]["type"] == "disabled"
+    assert kwargs["extra_body"]["thinking"]["type"] == "enabled"
 
 
 def test_non_deepseek_model_does_not_get_deepseek_thinking_options():
