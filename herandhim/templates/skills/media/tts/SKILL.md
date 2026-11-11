@@ -29,12 +29,17 @@ Convert text to a natural voice message and send it as a playable voice note.
 
 ## Usage
 
-```bash
-python {skill_path}/speak.py "想你了宝贝～晚安" --output voice.mp3
-```
+**Hosted Telegram companion (preferred):** call the native `send_voice_text`
+tool with the exact words to speak and an optional caption. It synthesizes the
+audio with the configured ElevenLabs or local Piper engine and sends the result
+as a playable voice bubble. This does not require shell access.
 
-Then deliver with the `send_voice` tool (playable voice bubble), not
-`send_file`.
+Do not use `run_command` just to create a voice note. If the native tool says
+no voice provider is configured, tell the user which TTS setting or API key is
+missing instead of pretending that audio was sent.
+
+**Local CLI use:** the `speak.py` script below remains available when running
+HerAndHim on a machine where shell execution is intentionally enabled.
 
 ### Options
 
