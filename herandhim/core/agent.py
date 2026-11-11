@@ -1069,7 +1069,7 @@ Don't repeat this if `bot_name` already exists in memory.
                 # tools so they route to the correct channel callback
                 # (per-group isolation).
                 if func_name in ('send_file', 'send_photo', 'send_voice',
-                                 'take_selfie', 'candid_shot'):
+                                 'send_voice_text', 'take_selfie', 'candid_shot'):
                     args.setdefault('session_id', self.session_id or "")
                 result = AVAILABLE_TOOLS[func_name](**args)
             else:
