@@ -251,3 +251,47 @@ def test_send_voice_tool_falls_back_to_send_file(tmp_path):
         tools.set_file_sender("s1", None)
     assert "sent" in out
     assert fallback and fallback[0].endswith("v.ogg")
+
+
+
+def test_send_voice_text_synthesizes_and_sends_without_shell(tmp_path, monkeypatch):
+    from herandhim.core import tools
+
+    captured = {"text": None, "audio": None, "caption": None}
+
+    async def fake_synthesize(text):
+        captured["text"] = text
+        return tts.VoiceClip(data=b"OGG_OPUS_AUDIO", format="ogg")
+
+    def fake_sender(path, caption):
+        with open(path, "rb") as f:
+            captured["audio"] = f.read()
+        captured["caption"] = caption
+
+    monkeypatch.setattr(tts, "synthesize_async", fake_synthesize)
+    tools.set_voice_sender("voice-text-test", fake_sender)
+    try:
+        result = tools.send_voice_text(
+            "Goodnight, talk tomorrow.",
+            caption="A little voice note",
+            session_id="voice-text-test",
+        )
+    finally:
+        tools.set_voice_sender("voice-text-test", None)
+
+    assert "sent" in result.lower()
+    assert captured == {
+        "text": "Goodnight, talk tomorrow.",
+        "audio": b"OGG_OPUS_AUDIO",
+        "caption": "A little voice note",
+    }
+
+
+def test_send_voice_text_reports_missing_tts_provider(monkeypatch):
+    from herandhim.core import tools
+
+    async def no_provider(text):
+        return None
+
+    monkeypatch.setattr(tts, "synthesize_async", no_provider)
+    assert tools.send_voice_text("Hello", session_id="no-tts-provider") == tts.no_provider_message()
