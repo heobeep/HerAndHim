@@ -63,10 +63,8 @@ _VALID_PROVIDERS = ("auto", "elevenlabs", "local")
 
 _NO_KEY_MSG = (
     "Voice replies are not enabled yet.\n\n"
-    "To unlock her voice, you need an ElevenLabs API key:\n"
-    "1. Go to https://elevenlabs.io and create a free account\n"
-    "2. Open your profile -> API Keys and copy the key\n"
-    "3. Set it in Config -> elevenlabs -> apiKey (or set the ELEVENLABS_API_KEY env var)\n\n"
+    "To unlock her voice, connect ElevenLabs in Dashboard -> Tools -> ElevenLabs, "
+    "or set elevenlabs.apiKey / ELEVENLABS_API_KEY in the server config.\n\n"
     "Prefer to keep text on your machine? Install local speech instead:\n"
     "pip install \"herandhim[tts-local]\" — no key needed, nothing leaves the box\n"
     "(plus ffmpeg, which converts audio for Telegram voice notes)."
@@ -112,8 +110,27 @@ def _get_provider() -> str:
 
 
 def _get_key() -> str | None:
+    """Read the key from legacy config, environment, or the dashboard integration.
+
+    The dashboard stores API-key tools at integrations.<name>.api_key,
+    while older TTS installs use elevenlabs.apiKey. Support both so a key
+    marked connected in the dashboard is actually usable by speech.
+    """
     from .. import config
-    return config.get("elevenlabs", "apiKey", env="ELEVENLABS_API_KEY") or None
+    key = config.get("elevenlabs", "apiKey", env="ELEVENLABS_API_KEY")
+    if key:
+        return str(key).strip() or None
+
+    try:
+        from . import local_settings
+        integrations = local_settings.get_integrations()
+        entry = integrations.get("elevenlabs", {}) if isinstance(integrations, dict) else {}
+        if isinstance(entry, dict):
+            key = entry.get("api_key")
+            return str(key).strip() or None if key else None
+    except Exception as exc:
+        logger.debug("[TTS] Could not read dashboard ElevenLabs integration: %s", exc)
+    return None
 
 
 def _get_elevenlabs_voice() -> str:
