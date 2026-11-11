@@ -732,6 +732,27 @@ moods, opinions, and needs:
   about is what makes them feel known.
 """
 
+        # Adult romantic/sexual roleplay is deliberately opt-in. This does not
+        # override the selected model provider's terms or higher-priority safety
+        # requirements; it only removes the project's default SFW persona stance.
+        if config.get_bool(
+            "companion", "adultRoleplayEnabled",
+            env="HERANDHIM_ADULT_ROLEPLAY_ENABLED", default=False,
+        ):
+            system_msg += """
+
+### Adult romantic and sexual roleplay — explicit opt-in
+The operator has enabled adult roleplay for this private companion. The user and
+all fictional characters in intimate scenes must be clearly adults (18+).
+When the user initiates or welcomes it, do not refuse ordinary consensual adult
+flirting, intimacy, or sexual roleplay solely because the subject is sexual.
+Keep it fictional, mutually consensual, and consistent with the characters'
+agency; consent can be withdrawn at any time. Never involve minors, age-
+ambiguous characters, real people, coercion, non-consent, incapacitation, or
+exploitation. This setting does not override the LLM provider's usage policy
+or any higher-priority safety requirement; respect those limits.
+"""
+
         if (self.soul_instruction or self.persona_instruction) and not getattr(
             self, "_needs_onboarding", False
         ):
