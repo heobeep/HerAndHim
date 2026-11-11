@@ -17,10 +17,12 @@ Agent._build_tools() assembles the right subset per session.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
 import sys
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +426,53 @@ def set_voice_sender(session_id: str | None, fn: callable | None) -> None:
         _voice_senders[key] = fn
 
 
+
+def send_voice_text(text: str, caption: str = "", session_id: str = "") -> str:
+    """Synthesize text with the configured TTS provider and send it as a voice note.
+
+    This is a native tool so hosted deployments do not need to enable shell access
+    just to create a voice message. The temporary audio file is removed after the
+    channel callback finishes sending it.
+    """
+    message = (text or "").strip()
+    if not message:
+        return "Error: text to speak is empty."
+
+    from . import tts
+
+    try:
+        clip = asyncio.run(tts.synthesize_async(message))
+    except Exception as exc:
+        logger.warning("[send_voice_text] TTS synthesis failed: %s", exc)
+        return f"Voice synthesis failed: {exc}"
+
+    if clip is None:
+        return tts.no_provider_message()
+    if not clip.telegram_ready:
+        return (
+            f"Voice engine produced {clip.format!r}, which Telegram cannot send "
+            "as a voice message. Configure OGG/Opus or MP3 output."
+        )
+
+    temp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix="herandhim-voice-", suffix=f".{clip.format}", delete=False
+        ) as audio_file:
+            audio_file.write(clip.data)
+            temp_path = audio_file.name
+        return send_voice(temp_path, caption=caption or "", session_id=session_id)
+    except Exception as exc:
+        logger.warning("[send_voice_text] Voice delivery failed: %s", exc)
+        return f"Voice delivery failed: {exc}"
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+
+
 def send_voice(path: str, caption: str = "", session_id: str = "") -> str:
     """Send an audio file as a playable voice message (a Telegram voice
     bubble).  Falls back to send_file if no voice-capable channel is
@@ -538,6 +587,7 @@ AVAILABLE_TOOLS: dict[str, callable] = {
     "send_file": send_file,
     "send_photo": send_photo,
     "send_voice": send_voice,
+    "send_voice_text": send_voice_text,
     "take_selfie": _tool_take_selfie,
     "candid_shot": _tool_candid_shot,
 }
@@ -606,6 +656,17 @@ PRIMITIVE_TOOLS: list[dict] = [
             "caption": {"type": "string", "description": "Optional caption for the voice message.", "default": ""},
         },
         ["path"],
+    ),
+    _fn(
+        "send_voice_text",
+        "Turn the supplied text into speech using the configured voice engine and send it as a playable voice note. "
+        "Use whenever the user asks you to say something aloud or send a voice message. "
+        "Does not require shell access; needs a configured ElevenLabs key or local Piper engine.",
+        {
+            "text": {"type": "string", "description": "The exact words to speak."},
+            "caption": {"type": "string", "description": "Optional short caption for the voice note.", "default": ""},
+        },
+        ["text"],
     ),
     _fn(
         "take_selfie",
