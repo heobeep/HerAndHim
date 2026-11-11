@@ -15,6 +15,7 @@ Convert text to a natural voice message and send it as a playable voice note.
 ✅ **USE this skill when:**
 
 - You want to send a voice message instead of text (偶尔用，增加亲密感)
+- The user explicitly asks for a voice note / voice message / audio message — treat this as an instruction to send one in the same turn, not as a casual suggestion
 - User asks "发个语音" or "say it"
 - You want to express strong emotion (excited, whiny, loving)
 - Saying goodnight or good morning with warmth
@@ -85,7 +86,7 @@ Or via environment variables: `ELEVENLABS_API_KEY`, `HERANDHIM_TTS_PROVIDER`.
   `tts.local.voice` to another Piper voice name or a `.onnx` path
 - Engine order in `auto`: ElevenLabs (key set) → local Piper (installed) →
   gTTS as the last resort
-- After generating, use the `send_voice` tool to deliver it as a voice note
+- After creating an audio file with the local CLI, use the `send_voice` tool to deliver it. For direct user requests, prefer `send_voice_text`, which synthesizes and sends in one action.
 
 ## Resources
 
