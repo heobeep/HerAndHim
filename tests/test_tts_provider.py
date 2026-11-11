@@ -129,6 +129,25 @@ def test_auto_prefers_elevenlabs_when_a_key_is_set(tmp_path, monkeypatch):
     assert clip.telegram_ready
 
 
+def test_auto_uses_elevenlabs_key_connected_in_dashboard(tmp_path, monkeypatch):
+    """The dashboard stores keys under integrations.elevenlabs.api_key."""
+    _configure(tmp_path, {
+        "integrations": {"elevenlabs": {"api_key": "dashboard-connected-key"}}
+    })
+    seen: dict = {}
+
+    async def fake(key, text):
+        seen["key"] = key
+        seen["text"] = text
+        return tts.VoiceClip(data=b"MP3DATA", format="mp3")
+
+    monkeypatch.setattr(tts, "_synthesize_elevenlabs_async", fake)
+    clip = asyncio.run(tts.synthesize_async("Please say hello."))
+
+    assert clip.data == b"MP3DATA"
+    assert seen == {"key": "dashboard-connected-key", "text": "Please say hello."}
+
+
 def test_auto_uses_local_when_no_key_but_piper_installed(tmp_path, monkeypatch):
     _configure(tmp_path, {"elevenlabs": {"apiKey": ""}})
     _fake_piper(monkeypatch)
