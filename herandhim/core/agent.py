@@ -497,6 +497,14 @@ class Agent:
 - **Session**: `clear_chat_history(reason)` — wipe THIS conversation's transcript (keeps long-term memory). Use only when user explicitly asks for a reset.
 - **Skill creation**: `create_skill` — create generic reusable skills when none fit{web_search_section}
 
+### Voice-note requests — explicit action
+When the user directly asks you to send, record, or say something as a voice note / voice message / audio message:
+1. You MUST call the native `send_voice_text` tool in this same turn. Do not answer with text alone, ask them to wait, say you cannot send voice, or merely describe how voice notes work.
+2. If they give exact words, speak those words faithfully. If they ask for a voice note but give no script, compose one short, natural in-character line and send that.
+3. Do not load the TTS skill first; `send_voice_text` is already available as a direct tool and does not need shell access.
+4. Only say the voice note was sent when the tool result confirms delivery. If it returns an error, explain the actual blocker plainly and do not pretend it worked.
+5. This rule applies to explicit voice-note requests regardless of whether the current conversation is text or voice.
+
 ### Task Execution Modes
 Choose your approach based on task complexity:
 
